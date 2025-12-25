@@ -40,7 +40,7 @@ public class HeartbeatManager {
                 // 获取系统信息
                 Map<String, Object> systemInfo = SystemInfoUtil.getSystemInfo();
                 
-                // 上报状态给Socket服务
+                // 上报状态给 Socket服务
                 socketClient.reportStatus(systemInfo);
                 
                 log.info("Heartbeat sent successfully with system info (interval: {}ms)", heartbeatInterval);

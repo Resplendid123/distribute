@@ -1,6 +1,5 @@
 package org.example.server.client;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -11,6 +10,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -24,15 +24,12 @@ public class SocketClient {
 
     private final RestTemplate restTemplate;
     private final String socketBaseUrl;
-    private final ObjectMapper objectMapper;
     private static final Logger log = LoggerFactory.getLogger(SocketClient.class);
 
     public SocketClient(RestTemplate restTemplate,
-                        @Value("${socket.server.url:http://localhost:9201}") String socketBaseUrl,
-                        ObjectMapper objectMapper) {
+                        @Value("${socket.server.url:http://localhost:9201}") String socketBaseUrl) {
         this.restTemplate = restTemplate;
         this.socketBaseUrl = socketBaseUrl;
-        this.objectMapper = objectMapper;
         log.info("SocketClient initialized with server: {}", socketBaseUrl);
     }
 
@@ -47,12 +44,10 @@ public class SocketClient {
      */
     public boolean forwardCommandToAgent(String agentId, Long commandId, String commandType, String commandContent) {
         try {
-            String url = UriComponentsBuilder.fromHttpUrl(socketBaseUrl)
+            URI uri = UriComponentsBuilder.fromUriString(socketBaseUrl)
                     .path("/api/socket/command/forward/{agentId}")
-                    .buildAndExpand(agentId)
-                    .toUriString();
+                    .build(agentId);
 
-            // 构建命令消息
             Map<String, Object> command = new HashMap<>();
             command.put("type", "command");
             command.put("commandId", commandId);
@@ -61,10 +56,10 @@ public class SocketClient {
             command.put("timestamp", System.currentTimeMillis());
 
             HttpHeaders headers = new HttpHeaders();
-            headers.add(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
+            headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(command, headers);
 
-            restTemplate.postForObject(url, entity, String.class);
+            restTemplate.postForObject(uri, entity, String.class);
             log.info("Command forwarded to agent via Socket: agentId={}, commandType={}", agentId, commandType);
             return true;
         } catch (Exception e) {

@@ -4,6 +4,7 @@ import org.example.common.context.Result;
 import org.example.server.domain.dto.CommandDto;
 import org.example.server.domain.dto.ConfigDto;
 import org.example.server.domain.vo.DeviceVo;
+import org.example.server.domain.vo.DeviceDetailVo;
 import org.example.server.service.DeviceService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -44,6 +45,15 @@ public class DeviceController {
     @GetMapping("/list")
     public ResponseEntity<Result<List<DeviceVo>>> getDeviceList() {
         Result<List<DeviceVo>> result = deviceService.getDeviceList();
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 获取设备详细信息
+     */
+    @GetMapping("/detail/{id}")
+    public ResponseEntity<Result<DeviceDetailVo>> getDeviceDetail(@PathVariable Long id) {
+        Result<DeviceDetailVo> result = deviceService.getDeviceDetail(id);
         return ResponseEntity.ok(result);
     }
 

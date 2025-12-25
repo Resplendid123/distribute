@@ -5,7 +5,7 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
- * CORS跨域配置
+ * CORS 跨域配置
  */
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
@@ -15,7 +15,7 @@ public class CorsConfig implements WebMvcConfigurer {
         registry.addMapping("/api/**")
                 // 允许的来源
                 .allowedOrigins("*")
-                // 允许的HTTP方法
+                // 允许的 HTTP方法
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
                 // 允许的请求头
                 .allowedHeaders("*")

@@ -11,6 +11,7 @@ import org.example.server.domain.dto.ConfigDto;
 import org.example.server.domain.pojo.Command;
 import org.example.server.domain.pojo.Device;
 import org.example.server.domain.vo.DeviceVo;
+import org.example.server.domain.vo.DeviceDetailVo;
 import org.example.server.mapper.CommandMapper;
 import org.example.server.mapper.DeviceMapper;
 import org.example.server.service.DeviceService;
@@ -62,7 +63,6 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
                 return handleOfflineCommand(device, command);
             }
 
-            // 通过Socket服务向Agent转发命令
             boolean forwarded = socketClient.forwardCommandToAgent(
                     commandDto.agentId(),
                     command.getId(),
@@ -102,7 +102,6 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
             command.setUpdatedAt(LocalDateTime.now());
             commandMapper.updateById(command);
 
-            // 通过Socket服务通知Agent强制下线
             String agentId = device.getName();
             boolean notified = socketClient.forwardCommandToAgent(
                     agentId,
@@ -163,7 +162,6 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
                             .ipAddress(device.getIpAddress())
                             .syncFrequency(device.getSyncFrequency())
                             .statusCode(device.getStatusCode())
-                            .info(device.getInfo())
                             .lastHeartbeatAt(device.getLastHeartbeatAt())
                             .createdAt(device.getCreatedAt())
                             .updatedAt(device.getUpdatedAt())
@@ -177,6 +175,32 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
     }
 
     @Override
+    public Result<DeviceDetailVo> getDeviceDetail(Long deviceId) {
+        try {
+            Device device = deviceMapper.selectById(deviceId);
+            if (device == null) {
+                return Result.fail(ResultCode.NOT_FOUND);
+            }
+
+            DeviceDetailVo deviceDetailVo = DeviceDetailVo.builder()
+                    .id(device.getId())
+                    .name(device.getName())
+                    .ipAddress(device.getIpAddress())
+                    .syncFrequency(device.getSyncFrequency())
+                    .statusCode(device.getStatusCode())
+                    .info(device.getInfo())
+                    .lastHeartbeatAt(device.getLastHeartbeatAt())
+                    .createdAt(device.getCreatedAt())
+                    .updatedAt(device.getUpdatedAt())
+                    .build();
+            return Result.success(deviceDetailVo);
+        } catch (Exception e) {
+            log.error("Error retrieving device detail for id: {}", deviceId, e);
+            return Result.fail(ResultCode.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @Override
     public void exportExcel(HttpServletResponse response) {
         try {
             List<Device> devices = deviceMapper.selectList(null);
@@ -184,8 +208,7 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
             response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             response.setCharacterEncoding("utf-8");
             response.setHeader("Content-Disposition", "attachment;filename=devices.xlsx");
-            
-            // 使用EasyExcel导出数据
+
             EasyExcel.write(response.getOutputStream(), Device.class)
                     .sheet("设备列表")
                     .doWrite(devices);

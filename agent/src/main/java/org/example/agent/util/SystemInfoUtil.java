@@ -10,13 +10,13 @@ import java.util.Map;
 
 /**
  * 系统信息工具类
- * 获取磁盘使用率和内存占用信息
+ * 获取磁盘使用率、内存占用率和CPU使用率等信息
  */
 public class SystemInfoUtil {
 
     /**
      * 获取系统信息
-     * @return 包含磁盘使用率和内存占用的信息Map
+     * @return 包含磁盘、内存和CPU信息的Map
      */
     public static Map<String, Object> getSystemInfo() {
         Map<String, Object> info = new HashMap<>();
@@ -27,7 +27,7 @@ public class SystemInfoUtil {
         // 获取内存信息
         info.put("memory", getMemoryInfo());
         
-        // 获取CPU信息
+        // 获取 CPU 信息
         info.put("cpu", getCpuInfo());
         
         return info;
@@ -114,7 +114,7 @@ public class SystemInfoUtil {
     }
 
     /**
-     * 获取CPU使用信息
+     * 获取 CPU使用信息
      */
     public static Map<String, Object> getCpuInfo() {
         Map<String, Object> cpuInfo = new HashMap<>();
@@ -162,43 +162,5 @@ public class SystemInfoUtil {
         final String[] units = new String[]{"B", "KB", "MB", "GB", "TB"};
         int digitGroups = (int) (Math.log10(bytes) / Math.log10(1024));
         return String.format("%.2f %s", bytes / Math.pow(1024, digitGroups), units[digitGroups]);
-    }
-
-    /**
-     * 获取简化的系统信息（仅包含使用百分比）
-     */
-    public static Map<String, String> getSimpleSystemInfo() {
-        Map<String, String> simpleInfo = new HashMap<>();
-        
-        try {
-            // 磁盘使用率
-            File root = new File("/");
-            long totalSpace = root.getTotalSpace();
-            long usedSpace = totalSpace - root.getUsableSpace();
-            double diskUsagePercentage = (double) usedSpace / totalSpace * 100;
-            simpleInfo.put("diskUsage", String.format("%.2f%%", diskUsagePercentage));
-            
-            // 内存使用率
-            MemoryMXBean memoryBean = ManagementFactory.getMemoryMXBean();
-            MemoryUsage heapUsage = memoryBean.getHeapMemoryUsage();
-            double memoryUsagePercentage = (double) heapUsage.getUsed() / heapUsage.getMax() * 100;
-            simpleInfo.put("memoryUsage", String.format("%.2f%%", memoryUsagePercentage));
-            
-            // CPU使用率
-            OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
-            double processCpuUsage = -1;
-            try {
-                processCpuUsage = (Double) osBean.getClass().getMethod("getProcessCpuLoad").invoke(osBean);
-            } catch (Exception e) {
-                // 方法不存在，使用 -1 表示不可用
-            }
-            String cpuUsage = processCpuUsage < 0 ? "N/A" : String.format("%.2f%%", processCpuUsage * 100);
-            simpleInfo.put("cpuUsage", cpuUsage);
-            
-        } catch (Exception e) {
-            simpleInfo.put("error", "Failed to get system info: " + e.getMessage());
-        }
-        
-        return simpleInfo;
     }
 }

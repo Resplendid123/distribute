@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -35,7 +36,7 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
     private volatile boolean connected = false;
     private ApplicationContext applicationContext;
 
-    private CountDownLatch connectLatch = new CountDownLatch(1);
+    private final CountDownLatch connectLatch = new CountDownLatch(1);
 
     /**
      * 设置应用上下文，用于关闭应用
@@ -46,8 +47,8 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
 
     /**
      * 异步连接到Socket服务，支持重试
-     * @param agentId Agent标识
-     * @param socketServerUrl Socket服务地址
+     * @param agentId Agent 标识
+     * @param socketServerUrl Socket 服务地址
      * @param maxRetries 最大重试次数
      * @param retryDelayMs 重试延迟(毫秒)
      */
@@ -90,8 +91,7 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
         
         WebSocketClient client = new StandardWebSocketClient();
         this.session = client.execute(this, wsUrl).get(5, TimeUnit.SECONDS);
-        
-        // 等待连接完成 (最多等待5秒)
+
         try {
             boolean success = connectLatch.await(5, TimeUnit.SECONDS);
             if (!success) {
@@ -106,7 +106,7 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
     }
 
     @Override
-    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+    public void afterConnectionEstablished(WebSocketSession session) {
         this.session = session;
         this.connected = true;
         log.info("Connected to Socket service. Session: {}", session.getId());
@@ -114,22 +114,19 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
     }
 
     @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+    protected void handleTextMessage(@NonNull WebSocketSession session, @NonNull TextMessage message) {
         try {
             String payload = message.getPayload();
             log.debug("Received message from Socket: {}", payload);
-            
-            // 解析消息
+
             var messageObj = objectMapper.readTree(payload);
             String type = messageObj.get("type") != null ? messageObj.get("type").asText() : "";
             
             switch (type) {
                 case "command":
-                    // 接收来自Socket的命令
                     handleCommand(messageObj);
                     break;
                 case "ping":
-                    // 响应心跳
                     sendHeartbeat();
                     break;
                 default:
@@ -141,19 +138,19 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
     }
 
     @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+    public void afterConnectionClosed(@NonNull WebSocketSession session, @NonNull CloseStatus status) {
         this.connected = false;
         log.info("Disconnected from Socket service. Reason: {}", status);
     }
 
     @Override
-    public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
+    public void handleTransportError(@NonNull WebSocketSession session, @NonNull Throwable exception) {
         log.error("WebSocket transport error", exception);
         this.connected = false;
     }
 
     /**
-     * 处理来自Socket的命令
+     * 处理来自 Socket 的命令
      */
     private void handleCommand(JsonNode messageObj) {
         try {
@@ -190,17 +187,15 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
         log.info("Executing command: type={}, content={}", commandType, commandContent);
         
         try {
-            switch (commandType.toLowerCase()) {
-                case "offline":
-                    return handleOfflineCommand();
-                case "status":
-                    return handleStatusCommand();
-                case "restart":
-                    return handleRestartCommand();
-                default:
+            return switch (commandType.toLowerCase()) {
+                case "offline" -> handleOfflineCommand();
+                case "status" -> handleStatusCommand();
+                case "restart" -> handleRestartCommand();
+                default -> {
                     log.warn("Unknown command type: {}", commandType);
-                    return false;
-            }
+                    yield false;
+                }
+            };
         } catch (Exception e) {
             log.error("Error executing command: type={}", commandType, e);
             return false;
@@ -225,10 +220,10 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
                     log.debug("Interrupted while waiting for shutdown", e);
                 }
                 
-                // 关闭WebSocket连接
+                // 关闭 WebSocket 连接
                 close();
                 
-                // 关闭Spring应用
+                // 关闭 Spring 应用
                 if (applicationContext != null) {
                     log.info("Shutting down Agent application");
                     SpringApplication.exit(applicationContext, () -> 0);
@@ -250,7 +245,7 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
      */
     private boolean handleStatusCommand() {
         log.info("Status command received");
-        // 可以返回Agent的状态信息
+
         return true;
     }
 
@@ -259,7 +254,7 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
      */
     private boolean handleRestartCommand() {
         log.info("Restart command received");
-        // 重启Agent应用
+
         new Thread(() -> {
             try {
                 Thread.sleep(1000);
@@ -279,7 +274,7 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
     }
 
     /**
-     * 发送心跳消息给Socket
+     * 发送心跳消息给 Socket
      */
     public void sendHeartbeat() {
         try {
@@ -327,7 +322,7 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
     }
 
     /**
-     * 上报状态给Socket
+     * 上报状态给 Socket
      */
     public void reportStatus(Map<String, Object> statusData) {
         try {
@@ -355,13 +350,6 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
      */
     public boolean isConnected() {
         return connected && session != null && session.isOpen();
-    }
-
-    /**
-     * 获取Agent ID
-     */
-    public String getAgentId() {
-        return agentId;
     }
 
     /**

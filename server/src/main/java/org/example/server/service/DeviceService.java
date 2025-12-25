@@ -6,6 +6,7 @@ import org.example.server.domain.dto.CommandDto;
 import org.example.server.domain.dto.ConfigDto;
 import org.example.server.domain.pojo.Device;
 import org.example.server.domain.vo.DeviceVo;
+import org.example.server.domain.vo.DeviceDetailVo;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 
@@ -27,7 +28,12 @@ public interface DeviceService extends IService<Device> {
     Result<List<DeviceVo>> getDeviceList();
 
     /**
-     * 导出Excel报表
+     * 获取设备详细信息
+     */
+    Result<DeviceDetailVo> getDeviceDetail(Long deviceId);
+
+    /**
+     * 导出 Excel报表
      */
     void exportExcel(HttpServletResponse response);
 }

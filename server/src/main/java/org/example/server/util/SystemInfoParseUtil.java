@@ -14,9 +14,9 @@ public class SystemInfoParseUtil {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
-     * 解析JSON格式的系统信息
-     * @param infoJson 系统信息JSON字符串
-     * @return 解析后的系统信息Map
+     * 解析 JSON格式的系统信息
+     * @param infoJson 系统信息 JSON字符串
+     * @return 解析后的系统信息 Map
      */
     public static Map<String, Object> parseSystemInfo(String infoJson) {
         Map<String, Object> result = new HashMap<>();
@@ -38,7 +38,7 @@ public class SystemInfoParseUtil {
                 result.put("memory", parseMemoryInfo(root.get("memory")));
             }
             
-            // 解析CPU信息
+            // 解析 CPU信息
             if (root.has("cpu")) {
                 result.put("cpu", parseCpuInfo(root.get("cpu")));
             }
@@ -103,7 +103,7 @@ public class SystemInfoParseUtil {
     }
 
     /**
-     * 解析CPU信息
+     * 解析 CPU信息
      */
     private static Map<String, String> parseCpuInfo(JsonNode cpuNode) {
         Map<String, String> cpuInfo = new HashMap<>();
@@ -117,7 +117,7 @@ public class SystemInfoParseUtil {
     }
 
     /**
-     * 从JsonNode获取字符串值
+     * 从 JsonNode获取字符串值
      */
     private static String getNodeAsString(JsonNode node, String field) {
         if (node == null || !node.has(field)) {
@@ -129,7 +129,7 @@ public class SystemInfoParseUtil {
 
     /**
      * 获取磁盘使用率百分比（简化版）
-     * @param infoJson 系统信息JSON字符串
+     * @param infoJson 系统信息 JSON字符串
      * @return 磁盘使用率百分比，格式为 "XX.XX%"
      */
     public static String getDiskUsagePercentage(String infoJson) {
@@ -151,7 +151,7 @@ public class SystemInfoParseUtil {
 
     /**
      * 获取内存使用率百分比（简化版）
-     * @param infoJson 系统信息JSON字符串
+     * @param infoJson 系统信息 JSON字符串
      * @return 内存使用率百分比，格式为 "XX.XX%"
      */
     public static String getMemoryUsagePercentage(String infoJson) {
@@ -174,7 +174,7 @@ public class SystemInfoParseUtil {
 
     /**
      * 获取CPU使用率（简化版）
-     * @param infoJson 系统信息JSON字符串
+     * @param infoJson 系统信息 JSON字符串
      * @return CPU使用率，格式为 "XX.XX%"
      */
     public static String getCpuUsagePercentage(String infoJson) {
@@ -237,7 +237,7 @@ public class SystemInfoParseUtil {
                 }
             }
             
-            // CPU信息
+            // CPU 信息
             if (root.has("cpu")) {
                 JsonNode cpuNode = root.get("cpu");
                 sb.append("\n【CPU信息】\n");
