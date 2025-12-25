@@ -122,29 +122,19 @@ public class SystemInfoUtil {
         try {
             OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
             
-            // 获取可用处理器数和平均负载
-            int availableProcessors = osBean.getAvailableProcessors();
+            int processors = osBean.getAvailableProcessors();
             double loadAverage = osBean.getSystemLoadAverage();
             
-            // 尝试通过反射获取 processCpuLoad 和 systemCpuLoad
-            double processCpuLoad = -1;
-            double systemCpuLoad = -1;
-            
+            // 通过反射获取系统CPU使用率（该方法不在标准接口中）
+            double systemCpu = -1;
             try {
-                processCpuLoad = (Double) osBean.getClass().getMethod("getProcessCpuLoad").invoke(osBean);
+                systemCpu = (Double) osBean.getClass().getMethod("getSystemCpuLoad").invoke(osBean);
             } catch (Exception e) {
-                // 方法不存在，使用 -1 表示不可用
+                // 该方法不可用
             }
             
-            try {
-                systemCpuLoad = (Double) osBean.getClass().getMethod("getSystemCpuLoad").invoke(osBean);
-            } catch (Exception e) {
-                // 方法不存在，使用 -1 表示不可用
-            }
-            
-            cpuInfo.put("processCpuUsage", processCpuLoad < 0 ? "N/A" : String.format("%.2f%%", processCpuLoad * 100));
-            cpuInfo.put("systemCpuUsage", systemCpuLoad < 0 ? "N/A" : String.format("%.2f%%", systemCpuLoad * 100));
-            cpuInfo.put("availableProcessors", availableProcessors);
+            cpuInfo.put("systemCpuUsage", systemCpu < 0 ? "N/A" : String.format("%.2f%%", systemCpu * 100));
+            cpuInfo.put("cpuProcessorCount", processors);
             cpuInfo.put("loadAverage", loadAverage < 0 ? "N/A" : String.format("%.2f", loadAverage));
             
         } catch (Exception e) {

@@ -25,7 +25,6 @@ public class DeviceDetailVo {
     private String systemMemoryTotal;
     private String systemMemoryUsed;
     private String systemMemoryUsagePercentage;
-    private String processCpuUsage;
     private String systemCpuUsage;
     private Integer cpuProcessorCount;
 
@@ -87,13 +86,12 @@ public class DeviceDetailVo {
 
             if (parsed.containsKey("cpu")) {
                 @SuppressWarnings("unchecked")
-                Map<String, String> cpuInfo = (Map<String, String>) parsed.get("cpu");
-                this.processCpuUsage = cpuInfo.get("processCpuUsage");
-                this.systemCpuUsage = cpuInfo.get("systemCpuUsage");
-                String processorCount = cpuInfo.get("availableProcessors");
+                Map<String, Object> cpuInfo = (Map<String, Object>) parsed.get("cpu");
+                this.systemCpuUsage = (String) cpuInfo.get("systemCpuUsage");
+                Object processorCount = cpuInfo.get("cpuProcessorCount");
                 if (processorCount != null) {
                     try {
-                        this.cpuProcessorCount = Integer.parseInt(processorCount);
+                        this.cpuProcessorCount = Integer.parseInt(processorCount.toString());
                     } catch (NumberFormatException e) {
                         this.cpuProcessorCount = null;
                     }
@@ -246,14 +244,6 @@ public class DeviceDetailVo {
 
     public void setSystemMemoryUsagePercentage(String systemMemoryUsagePercentage) {
         this.systemMemoryUsagePercentage = systemMemoryUsagePercentage;
-    }
-
-    public String getProcessCpuUsage() {
-        return processCpuUsage;
-    }
-
-    public void setProcessCpuUsage(String processCpuUsage) {
-        this.processCpuUsage = processCpuUsage;
     }
 
     public String getSystemCpuUsage() {
