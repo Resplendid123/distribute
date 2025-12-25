@@ -61,7 +61,7 @@ public class SocketClient {
             command.put("timestamp", System.currentTimeMillis());
 
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.add(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(command, headers);
 
             restTemplate.postForObject(url, entity, String.class);

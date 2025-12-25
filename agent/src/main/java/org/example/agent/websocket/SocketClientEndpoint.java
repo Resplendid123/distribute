@@ -89,7 +89,7 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
         log.info("Attempting to connect to Socket service: {}", wsUrl);
         
         WebSocketClient client = new StandardWebSocketClient();
-        this.session = client.doHandshake(this, wsUrl).get(5, TimeUnit.SECONDS);
+        this.session = client.execute(this, wsUrl).get(5, TimeUnit.SECONDS);
         
         // 等待连接完成 (最多等待5秒)
         try {
