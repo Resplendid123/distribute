@@ -1,0 +1,30 @@
+server:
+  port: ${AGENT_PORT:9198}
+
+agent:
+  id: ${AGENT_ID:agent-001}
+  heartbeat:
+    interval: ${AGENT_HEARTBEAT_INTERVAL:30000}  # 30秒发送一次心跳
+
+socket:
+  server:
+    url: ${SOCKET_SERVER_URL:ws://localhost:9202}
+  connect:
+    max-retries: ${SOCKET_MAX_RETRIES:10}  # 最多重试10次
+    retry-delay-ms: ${SOCKET_RETRY_DELAY_MS:3000}  # 每次重试间隔3秒
+
+spring:
+  application:
+    name: agent
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+
+logging:
+  level:
+    root: INFO
+    org.example.agent: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
