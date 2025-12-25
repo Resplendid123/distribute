@@ -165,7 +165,6 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
                             .statusCode(device.getStatusCode())
                             .info(device.getInfo())
                             .lastHeartbeatAt(device.getLastHeartbeatAt())
-                            .isOnline(device.getStatusCode() == 1)
                             .createdAt(device.getCreatedAt())
                             .updatedAt(device.getUpdatedAt())
                             .build())
