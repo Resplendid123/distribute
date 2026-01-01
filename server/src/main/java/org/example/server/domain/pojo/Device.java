@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 public class Device {
     private Long id;
     private String name;
+    private String remarkName;
     private String ipAddress;
     private Integer syncFrequency;
     private Integer statusCode;
@@ -19,9 +20,10 @@ public class Device {
     public Device() {
     }
 
-    public Device(Long id, String name, String ipAddress, Integer syncFrequency, Integer statusCode, String info, LocalDateTime lastHeartbeatAt, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public Device(Long id, String name, String remarkName, String ipAddress, Integer syncFrequency, Integer statusCode, String info, LocalDateTime lastHeartbeatAt, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.name = name;
+        this.remarkName = remarkName;
         this.ipAddress = ipAddress;
         this.syncFrequency = syncFrequency;
         this.statusCode = statusCode;
@@ -46,6 +48,14 @@ public class Device {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getRemarkName() {
+        return remarkName;
+    }
+
+    public void setRemarkName(String remarkName) {
+        this.remarkName = remarkName;
     }
 
     public String getIpAddress() {

@@ -1,15 +1,15 @@
 package org.example.socket.manager;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.web.socket.WebSocketSession;
-import org.springframework.web.socket.TextMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Agent连接管理器 - 维护所有连接的Agent会话
@@ -21,9 +21,8 @@ public class AgentConnectionManager {
     private static final Logger log = LoggerFactory.getLogger(AgentConnectionManager.class);
 
     private static final Map<String, AgentSession> agentSessions = new ConcurrentHashMap<>();
-    
+
     private final ObjectMapper objectMapper;
-    
     public AgentConnectionManager(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
@@ -31,45 +30,45 @@ public class AgentConnectionManager {
     /**
      * 注册Agent连接
      */
-    public void registerAgent(String agentId, WebSocketSession session) {
+    public void registerAgent(String name, WebSocketSession session) {
         try {
-            agentSessions.put(agentId, new AgentSession(agentId, session));
-            log.info("Agent registered: {}, Total agents: {}", agentId, agentSessions.size());
+            agentSessions.put(name, new AgentSession(name, session));
+            log.info("Agent registered: {}, Total agents: {}", name, agentSessions.size());
         } catch (Exception e) {
-            log.error("Error registering agent: {}", agentId, e);
+            log.error("Error registering agent: {}", name, e);
         }
     }
 
     /**
      * 注销Agent连接
      */
-    public void unregisterAgent(String agentId) {
-        agentSessions.remove(agentId);
-        log.info("Agent unregistered: {}, Remaining agents: {}", agentId, agentSessions.size());
+    public void unregisterAgent(String name) {
+        agentSessions.remove(name);
+        log.info("Agent unregistered: {}, Remaining agents: {}", name, agentSessions.size());
     }
 
     /**
      * 向指定Agent发送命令
      */
-    public void sendCommandToAgent(String agentId, Map<String, Object> command) {
+    public void sendCommandToAgent(String name, Map<String, Object> command) {
         try {
-            AgentSession agentSession = agentSessions.get(agentId);
+            AgentSession agentSession = agentSessions.get(name);
             if (agentSession == null) {
-                log.warn("Agent not found: {}", agentId);
+                log.warn("Agent not found: {}", name);
                 return;
             }
             
+
             if (!agentSession.isConnected()) {
-                log.warn("Agent not connected: {}", agentId);
-                agentSessions.remove(agentId);
+                log.warn("Agent not connected: {}", name);
+                agentSessions.remove(name);
                 return;
             }
-            
-            String messageJson = objectMapper.writeValueAsString(command);
+String messageJson = objectMapper.writeValueAsString(command);
             agentSession.sendMessage(messageJson);
-            log.info("Command sent to agent: {}", agentId);
+            log.info("Command sent to agent: {}", name);
         } catch (Exception e) {
-            log.error("Error sending command to agent: {}", agentId, e);
+            log.error("Error sending command to agent: {}", name, e);
         }
     }
 
@@ -90,8 +89,8 @@ public class AgentConnectionManager {
     /**
      * 检查Agent是否在线
      */
-    public boolean isAgentOnline(String agentId) {
-        AgentSession session = agentSessions.get(agentId);
+    public boolean isAgentOnline(String name) {
+        AgentSession session = agentSessions.get(name);
         return session != null && session.isConnected();
     }
 
@@ -99,18 +98,18 @@ public class AgentConnectionManager {
      * 内部类：Agent会话包装 - Spring WebSocket实现
      */
     public static class AgentSession {
-        private final String agentId;
+        private final String name;
         private final WebSocketSession session;
         private final long createdAt;
 
-        public AgentSession(String agentId, WebSocketSession session) {
-            this.agentId = agentId;
+        public AgentSession(String name, WebSocketSession session) {
+            this.name = name;
             this.session = session;
             this.createdAt = System.currentTimeMillis();
         }
 
         public String getAgentId() {
-            return agentId;
+            return name;
         }
 
         public WebSocketSession getSession() {

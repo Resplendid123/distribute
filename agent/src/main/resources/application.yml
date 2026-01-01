@@ -2,7 +2,7 @@ server:
   port: ${AGENT_PORT:9198}
 
 agent:
-  id: ${AGENT_ID:agent-001}
+  name: ${AGENT_NAME:agent-001}
   heartbeat:
     interval: ${AGENT_HEARTBEAT_INTERVAL:30000}  # 30秒发送一次心跳
 

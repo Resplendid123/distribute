@@ -2,71 +2,79 @@ package org.example.socket.service;
 
 import org.example.socket.domain.Device;
 import org.example.socket.mapper.DeviceMapper;
+import org.example.common.constant.DeviceStatusConstant;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 
 import java.time.LocalDateTime;
 
 /**
  * 设备管理服务
  * 负责在数据库中创建、更新设备记录
- * 
- * 关键概念：
- * - agentId: 字符串标识，对应数据库Device表的name字段
- * - deviceId: 数据库主键ID（Long类型）
  */
 @Service
 public class DeviceManagementService {
 
     private static final Logger log = LoggerFactory.getLogger(DeviceManagementService.class);
     private final DeviceMapper deviceMapper;
+    private final Integer defaultSyncFrequency;
 
-    public DeviceManagementService(DeviceMapper deviceMapper) {
+    public DeviceManagementService(DeviceMapper deviceMapper,
+                                   @Value("${device.default-sync-frequency:30}") Integer defaultSyncFrequency) {
         this.deviceMapper = deviceMapper;
+        this.defaultSyncFrequency = defaultSyncFrequency;
     }
 
     /**
      * 注册或更新设备
-     * Agent连接时调用，通过agentId查询或创建设备记录
+     * Agent连接时调用，按设备名称(name)查询是否已存在
+     * - 如果存在，更新状态为ONLINE并返回原ID
+     * - 如果不存在，创建新的设备记录
      * 
-     * @param agentId 代理ID
+     * @param name 设备名称(Agent name)
      * @param ipAddress 代理IP地址
+     * @return 设备ID（复用旧ID或新创建的ID）
      */
-    public void registerOrUpdateDevice(String agentId, String ipAddress) {
+    public Long registerOrUpdateDevice(String name, String ipAddress) {
         try {
-            // 通过 agentId 查询设备
+            // 按name查询是否已存在该设备
             QueryWrapper<Device> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("name", agentId);
-            Device device = deviceMapper.selectOne(queryWrapper);
+            queryWrapper.eq("name", name);
+            Device existingDevice = deviceMapper.selectOne(queryWrapper);
             
-            if (device == null) {
-                // 新设备，创建记录
-                device = new Device();
-                device.setName(agentId);
-                device.setIpAddress(ipAddress);
-                device.setStatusCode(1); // 1表示在线
-                device.setSyncFrequency(30); // 默认30秒
-                device.setLastHeartbeatAt(LocalDateTime.now());
-                device.setCreatedAt(LocalDateTime.now());
-                device.setUpdatedAt(LocalDateTime.now());
-                deviceMapper.insert(device);
-                log.info("Device created: agentId={}, ipAddress={}", agentId, ipAddress);
-            } else {
-                // 更新现有设备
-                device.setStatusCode(1); // 标记为在线
-                device.setLastHeartbeatAt(LocalDateTime.now());
-                device.setUpdatedAt(LocalDateTime.now());
+            if (existingDevice != null) {
+                // 设备已存在，更新状态为ONLINE
+                existingDevice.setStatusCode(DeviceStatusConstant.ONLINE);
+                existingDevice.setLastHeartbeatAt(LocalDateTime.now());
+                existingDevice.setUpdatedAt(LocalDateTime.now());
                 if (ipAddress != null) {
-                    device.setIpAddress(ipAddress);
+                    existingDevice.setIpAddress(ipAddress);
                 }
-                deviceMapper.updateById(device);
-                log.info("Device updated: agentId={}", agentId);
+                deviceMapper.updateById(existingDevice);
+                log.info("Device updated (reused ID): id={}, name={}, ipAddress={}", existingDevice.getId(), name, ipAddress);
+                return existingDevice.getId();
+            } else {
+                // 设备不存在，创建新记录
+                Device newDevice = new Device();
+                newDevice.setName(name);
+                newDevice.setIpAddress(ipAddress);
+                newDevice.setStatusCode(DeviceStatusConstant.ONLINE);
+                newDevice.setSyncFrequency(defaultSyncFrequency);
+                newDevice.setCreatedAt(LocalDateTime.now());
+                newDevice.setUpdatedAt(LocalDateTime.now());
+                newDevice.setLastHeartbeatAt(LocalDateTime.now());
+                
+                deviceMapper.insert(newDevice);
+                log.info("Device created: id={}, name={}, ipAddress={}", newDevice.getId(), name, ipAddress);
+                return newDevice.getId();
             }
         } catch (Exception e) {
-            log.error("Error registering/updating device: {}", agentId, e);
+            log.error("Error registering device: {}", name, e);
+            return null;
         }
     }
 
@@ -74,75 +82,84 @@ public class DeviceManagementService {
      * 标记设备离线
      * Agent断开连接时调用
      * 
-     * @param agentId 代理ID
+     * @param deviceId 设备ID
      */
-    public void markDeviceOffline(String agentId) {
+    public void markDeviceOffline(Long deviceId) {
         try {
-            QueryWrapper<Device> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("name", agentId);
-            Device device = deviceMapper.selectOne(queryWrapper);
+            Device device = deviceMapper.selectById(deviceId);
             
             if (device != null) {
-                device.setStatusCode(0); // 0表示离线
+                device.setStatusCode(DeviceStatusConstant.OFFLINE);
                 device.setUpdatedAt(LocalDateTime.now());
                 deviceMapper.updateById(device);
-                log.info("Device marked offline: {}", agentId);
+                log.info("Device marked offline: id={}", deviceId);
             } else {
-                log.warn("Device not found for offline marking: {}", agentId);
+                log.warn("Device not found for offline marking: id={}", deviceId);
             }
         } catch (Exception e) {
-            log.error("Error marking device offline: {}", agentId, e);
+            log.error("Error marking device offline: {}", deviceId, e);
         }
     }
 
     /**
      * 更新设备心跳时间
      * 
-     * @param agentId 代理ID
+     * @param deviceId 设备ID
      */
-    public void updateDeviceHeartbeat(String agentId) {
+    public void updateDeviceHeartbeat(Long deviceId) {
         try {
-            QueryWrapper<Device> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("name", agentId);
-            Device device = deviceMapper.selectOne(queryWrapper);
+            Device device = deviceMapper.selectById(deviceId);
             
             if (device != null) {
                 LocalDateTime now = LocalDateTime.now();
                 device.setLastHeartbeatAt(now);
-                device.setStatusCode(1); // 确保状态为在线
+                device.setStatusCode(DeviceStatusConstant.ONLINE);
                 device.setUpdatedAt(now);
                 deviceMapper.updateById(device);
-                log.debug("Device heartbeat updated: agentId={}, lastHeartbeatAt={}", agentId, now);
+                log.debug("Device heartbeat updated: id={}, lastHeartbeatAt={}", deviceId, now);
             } else {
-                log.warn("Device not found for heartbeat update: {}", agentId);
+                log.warn("Device not found for heartbeat update: id={}", deviceId);
             }
         } catch (Exception e) {
-            log.error("Error updating device heartbeat: {}", agentId, e);
+            log.error("Error updating device heartbeat: {}", deviceId, e);
         }
     }
 
     /**
      * 更新设备状态信息
      * 
-     * @param agentId 代理ID
+     * @param deviceId 设备ID
      * @param statusNode JSON状态数据
      */
-    public void updateDeviceStatus(String agentId, JsonNode statusNode) {
+    public void updateDeviceStatus(Long deviceId, JsonNode statusNode) {
         try {
-            QueryWrapper<Device> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("name", agentId);
-            Device device = deviceMapper.selectOne(queryWrapper);
+            Device device = deviceMapper.selectById(deviceId);
             
             if (device != null && statusNode != null) {
                 device.setInfo(statusNode.toString());
                 device.setUpdatedAt(LocalDateTime.now());
                 deviceMapper.updateById(device);
-                log.debug("Device status updated: {}", agentId);
+                log.debug("Device status updated: id={}", deviceId);
             } else {
-                log.warn("Device not found for status update: {}", agentId);
+                log.warn("Device not found for status update: id={}", deviceId);
             }
         } catch (Exception e) {
-            log.error("Error updating device status: {}", agentId, e);
+            log.error("Error updating device status: {}", deviceId, e);
+        }
+    }
+
+    /**
+     * 根据设备ID获取设备信息
+     * 
+     * @param deviceId 设备ID
+     * @return 设备对象，如果不存在则返回null
+     */
+    public Device getDeviceById(Long deviceId) {
+        try {
+            return deviceMapper.selectById(deviceId);
+        } catch (Exception e) {
+            log.error("Error getting device by id: {}", deviceId, e);
+            return null;
         }
     }
 }

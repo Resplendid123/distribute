@@ -25,7 +25,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
         registry.addHandler(agentWebSocketHandler, "/ws/agent/{deviceId}")
                 .addInterceptors(new AgentWebSocketHandshakeInterceptor())
                 .setAllowedOrigins("*");
-        
+
         registry.addHandler(deviceMonitorWebSocketHandler, "/ws/monitor")
                 .setAllowedOrigins("*");
     }

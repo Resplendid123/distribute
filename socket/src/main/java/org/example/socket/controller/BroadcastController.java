@@ -3,6 +3,7 @@ package org.example.socket.controller;
 import org.example.socket.domain.PushMessage;
 import org.example.socket.service.BroadcastService;
 import org.example.socket.manager.AgentConnectionManager;
+import org.example.socket.mapper.DeviceMapper;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.slf4j.Logger;
@@ -16,11 +17,13 @@ public class BroadcastController {
 
     private final BroadcastService broadcastService;
     private final AgentConnectionManager agentConnectionManager;
+    private final DeviceMapper deviceMapper;
     private static final Logger log = LoggerFactory.getLogger(BroadcastController.class);
 
-    public BroadcastController(BroadcastService broadcastService, AgentConnectionManager agentConnectionManager) {
+    public BroadcastController(BroadcastService broadcastService, AgentConnectionManager agentConnectionManager, DeviceMapper deviceMapper) {
         this.broadcastService = broadcastService;
         this.agentConnectionManager = agentConnectionManager;
+        this.deviceMapper = deviceMapper;
     }
 
     /**
@@ -72,22 +75,31 @@ public class BroadcastController {
 
     /**
      * 向Agent转发命令 - Server调用此API向Agent发送命令
-     * @param agentId 设备标识
+     * @param deviceId 设备ID
      * @param command 命令内容
      */
-    @PostMapping("/command/forward/{agentId}")
+    @PostMapping("/command/forward/{deviceId}")
     public ResponseEntity<String> forwardCommandToAgent(
-            @PathVariable String agentId,
+            @PathVariable Long deviceId,
             @RequestBody Map<String, Object> command) {
         try {
-            if (!agentConnectionManager.isAgentOnline(agentId)) {
-                return ResponseEntity.status(404).body("Agent not found or offline: " + agentId);
+            // 需要根据 deviceId 从数据库获取设备信息，才能得到 Agent name
+            // 因为 Agent 是按 name 存储在连接管理器中的
+            org.example.socket.domain.Device device = deviceMapper.selectById(deviceId);
+            if (device == null) {
+                log.warn("Device not found: {}", deviceId);
+                return ResponseEntity.status(404).body("Device not found: " + deviceId);
             }
             
-            agentConnectionManager.sendCommandToAgent(agentId, command);
-            return ResponseEntity.ok("Command forwarded to agent: " + agentId);
+            String agentName = device.getName();
+            if (!agentConnectionManager.isAgentOnline(agentName)) {
+                return ResponseEntity.status(404).body("Agent not found or offline: " + agentName);
+            }
+            
+            agentConnectionManager.sendCommandToAgent(agentName, command);
+            return ResponseEntity.ok("Command forwarded to agent: " + agentName);
         } catch (Exception e) {
-            log.error("Error forwarding command to agent: {}", agentId, e);
+            log.error("Error forwarding command to agent: {}", deviceId, e);
             return ResponseEntity.status(500).body("Failed to forward command: " + e.getMessage());
         }
     }
@@ -95,11 +107,11 @@ public class BroadcastController {
     /**
      * 检查指定Agent是否在线
      */
-    @GetMapping("/agent/{agentId}/status")
-    public ResponseEntity<Map<String, Object>> getAgentStatus(@PathVariable String agentId) {
+    @GetMapping("/agent/{name}/status")
+    public ResponseEntity<Map<String, Object>> getAgentStatus(@PathVariable String name) {
         Map<String, Object> status = new HashMap<>();
-        boolean isOnline = agentConnectionManager.isAgentOnline(agentId);
-        status.put("agentId", agentId);
+        boolean isOnline = agentConnectionManager.isAgentOnline(name);
+        status.put("agentId", name);
         status.put("online", isOnline);
         return ResponseEntity.ok(status);
     }

@@ -1,6 +1,9 @@
 server:
   port: 9202
 
+device:
+  default-sync-frequency: 30  # 设备默认同步频率(秒)
+
 spring:
   application:
     name: socket

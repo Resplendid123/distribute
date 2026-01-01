@@ -1,7 +1,8 @@
 package org.example.server.domain.dto;
 
 public record ConfigDto(
-        String ip,
+        Long id,
+        String remarkName,
         Integer syncFrequencySeconds
 ) {
 }

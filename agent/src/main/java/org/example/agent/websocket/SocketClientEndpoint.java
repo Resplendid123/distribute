@@ -2,6 +2,9 @@ package org.example.agent.websocket;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.example.agent.manager.ConfigManager;
+import org.example.agent.manager.HeartbeatManager;
+import org.example.agent.manager.RestartManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
@@ -14,6 +17,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.client.WebSocketClient;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
+
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -29,14 +33,30 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(SocketClientEndpoint.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
-    
+
     private WebSocketSession session;
     private String agentId;
     private String socketServerUrl;
     private volatile boolean connected = false;
     private ApplicationContext applicationContext;
+    private final ConfigManager configManager;
+    private final RestartManager restartManager;
+    private HeartbeatManager heartbeatManager;
 
     private final CountDownLatch connectLatch = new CountDownLatch(1);
+
+    public SocketClientEndpoint(ConfigManager configManager, RestartManager restartManager) {
+        this.configManager = configManager;
+        this.restartManager = restartManager;
+    }
+
+    /**
+     * 设置HeartbeatManager，用于启动/停止心跳
+     * 通过setter注入来避免循环依赖
+     */
+    public void setHeartbeatManager(HeartbeatManager heartbeatManager) {
+        this.heartbeatManager = heartbeatManager;
+    }
 
     /**
      * 设置应用上下文，用于关闭应用
@@ -110,7 +130,55 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
         this.session = session;
         this.connected = true;
         log.info("Connected to Socket service. Session: {}", session.getId());
+        
+        // 连接成功后，启动心跳定时任务
+        heartbeatManager.startHeartbeat();
+        
+        // 连接成功后，异步查询Server上保存的同步频率配置
+        querySyncFrequencyAsync();
+        
         connectLatch.countDown();
+    }
+
+    /**
+     * 异步查询Server上保存的同步频率配置
+     * 通过WebSocket发送查询请求给Socket服务
+     */
+    private void querySyncFrequencyAsync() {
+        new Thread(() -> {
+            try {
+                Thread.sleep(500); // 延迟500ms，确保连接完全建立
+                querySyncFrequency();
+            } catch (InterruptedException e) {
+                log.warn("Interrupted while querying sync frequency", e);
+                Thread.currentThread().interrupt();
+            }
+        }, "SyncFrequencyQueryThread").start();
+    }
+
+    /**
+     * 查询Server上保存的同步频率配置
+     * 向Socket服务发送query_config请求
+     */
+    private void querySyncFrequency() {
+        try {
+            if (!isConnected()) {
+                log.warn("Cannot query sync frequency: not connected to Socket");
+                return;
+            }
+            
+            Map<String, Object> queryMessage = new HashMap<>();
+            queryMessage.put("type", "query_config");
+            queryMessage.put("agentId", agentId);
+            queryMessage.put("configType", "syncFrequency");
+            queryMessage.put("timestamp", System.currentTimeMillis());
+            
+            String messageJson = objectMapper.writeValueAsString(queryMessage);
+            session.sendMessage(new TextMessage(messageJson));
+            log.info("Sync frequency query sent to Socket service (agentId: {})", agentId);
+        } catch (Exception e) {
+            log.error("Error querying sync frequency", e);
+        }
     }
 
     @Override
@@ -119,12 +187,15 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
             String payload = message.getPayload();
             log.debug("Received message from Socket: {}", payload);
 
-            var messageObj = objectMapper.readTree(payload);
+            JsonNode messageObj = objectMapper.readTree(payload);
             String type = messageObj.get("type") != null ? messageObj.get("type").asText() : "";
-            
+
             switch (type) {
                 case "command":
                     handleCommand(messageObj);
+                    break;
+                case "config_response":
+                    handleConfigResponse(messageObj);
                     break;
                 case "ping":
                     sendHeartbeat();
@@ -141,6 +212,9 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
     public void afterConnectionClosed(@NonNull WebSocketSession session, @NonNull CloseStatus status) {
         this.connected = false;
         log.info("Disconnected from Socket service. Reason: {}", status);
+        
+        // 连接关闭时停止心跳
+        heartbeatManager.stopHeartbeat();
     }
 
     @Override
@@ -150,25 +224,52 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
     }
 
     /**
+     * 处理来自Socket的配置响应
+     * 包含Server查询返回的同步频率等配置信息
+     */
+    private void handleConfigResponse(JsonNode messageObj) {
+        try {
+            log.info("Received config response from Socket");
+            
+            // 提取syncFrequency
+            if (messageObj.has("syncFrequency")) {
+                Integer syncFrequencySeconds = messageObj.get("syncFrequency").asInt();
+                
+                if (syncFrequencySeconds != null && syncFrequencySeconds > 0) {
+                    // 更新ConfigManager中的同步频率
+                    configManager.updateSyncFrequency(syncFrequencySeconds);
+                    log.info("Sync frequency initialized from Server: {}s", syncFrequencySeconds);
+                } else {
+                    log.warn("Invalid syncFrequency in config response: {}", syncFrequencySeconds);
+                }
+            } else {
+                log.warn("syncFrequency field not found in config response");
+            }
+        } catch (Exception e) {
+            log.error("Error handling config response", e);
+        }
+    }
+
+    /**
      * 处理来自 Socket 的命令
      */
     private void handleCommand(JsonNode messageObj) {
         try {
             // commandId可能不存在（向后兼容），使用-1作为默认值
             long commandId = -1;
-            com.fasterxml.jackson.databind.JsonNode commandIdNode = messageObj.get("commandId");
+            JsonNode commandIdNode = messageObj.get("commandId");
             if (commandIdNode != null && !commandIdNode.isNull()) {
                 commandId = commandIdNode.asLong();
             }
-            
+
             String commandType = messageObj.get("commandType").asText();
             String commandContent = messageObj.get("commandContent").asText();
-            
+
             log.info("Received command: id={}, type={}, content={}", commandId, commandType, commandContent);
-            
-            // 执行命令 (这里可以委托给命令执行器)
+
+            // 执行命令
             boolean success = executeCommand(commandType, commandContent);
-            
+
             // 如果有commandId，发送命令执行结果
             if (commandId > 0) {
                 sendCommandResult(commandId, success, "Command executed successfully");
@@ -189,7 +290,7 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
         try {
             return switch (commandType.toLowerCase()) {
                 case "offline" -> handleOfflineCommand();
-                case "status" -> handleStatusCommand();
+                case "config" -> handleConfigCommand(commandContent);
                 case "restart" -> handleRestartCommand();
                 default -> {
                     log.warn("Unknown command type: {}", commandType);
@@ -209,15 +310,15 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
         log.warn("Received offline command, agent will be shut down");
         
         try {
-            // 立即发送命令结果确认
-            sendCommandResult(0, true, "Agent is shutting down");
-            
-            // 延迟关闭，确保消息发送完成
+            // 在后台线程中执行关闭逻辑，不在这里发送消息
+            // 让调用者（handleCommand）通过返回true后发送命令结果
             new Thread(() -> {
                 try {
-                    Thread.sleep(1000); // 等待1秒
+                    // 延迟2秒，确保命令结果消息已发送完成
+                    Thread.sleep(2000);
                 } catch (InterruptedException e) {
                     log.debug("Interrupted while waiting for shutdown", e);
+                    Thread.currentThread().interrupt();
                 }
                 
                 // 关闭 WebSocket 连接
@@ -241,34 +342,56 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
     }
 
     /**
-     * 处理状态查询命令
+     * 处理配置更新命令
+     * 解析Server发来的同步频率配置，更新ConfigManager
+     * 
+     * @param commandContent JSON格式的配置内容，例如: {"syncFrequency":60}
+     * @return true表示配置更新成功，false表示更新失败
      */
-    private boolean handleStatusCommand() {
-        log.info("Status command received");
-
-        return true;
+    private boolean handleConfigCommand(String commandContent) {
+        try {
+            log.info("Processing config command: {}", commandContent);
+            
+            if (commandContent == null || commandContent.isEmpty()) {
+                log.warn("Config command content is empty");
+                return false;
+            }
+            
+            // 解析JSON格式的配置内容
+            JsonNode configNode = objectMapper.readTree(commandContent);
+            
+            // 提取同步频率（秒）
+            if (configNode.has("syncFrequency")) {
+                Integer syncFrequencySeconds = configNode.get("syncFrequency").asInt();
+                
+                if (syncFrequencySeconds != null && syncFrequencySeconds > 0) {
+                    // 更新ConfigManager中的同步频率
+                    configManager.updateSyncFrequency(syncFrequencySeconds);
+                    log.info("Config updated successfully: syncFrequency={}s", syncFrequencySeconds);
+                    return true;
+                } else {
+                    log.warn("Invalid syncFrequency value: {}", syncFrequencySeconds);
+                    return false;
+                }
+            } else {
+                log.warn("syncFrequency field not found in config command");
+                return false;
+            }
+        } catch (Exception e) {
+            log.error("Error processing config command: {}", commandContent, e);
+            return false;
+        }
     }
 
     /**
      * 处理重启命令
      */
     private boolean handleRestartCommand() {
-        log.info("Restart command received");
+        log.info("Restart command received, will restart Agent application");
 
-        new Thread(() -> {
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                log.debug("Interrupted while waiting for restart", e);
-            }
-            
-            close();
-            
-            if (applicationContext != null) {
-                log.info("Restarting Agent application");
-                SpringApplication.exit(applicationContext, () -> 1);
-            }
-        }, "AgentRestartThread").start();
+        // 在后台线程中执行重启逻辑，不在这里发送消息
+        // 让调用者（handleCommand）通过返回true后发送命令结果
+        restartManager.restartAsync(applicationContext, 2000);
         
         return true;
     }
@@ -346,14 +469,14 @@ public class SocketClientEndpoint extends TextWebSocketHandler {
     }
 
     /**
-     * 检查是否已连接
+     * 检查是否已连接到 Socket服务
      */
     public boolean isConnected() {
         return connected && session != null && session.isOpen();
     }
 
     /**
-     * 关闭连接
+     * 关闭 WebSocket连接
      */
     public void close() {
         try {

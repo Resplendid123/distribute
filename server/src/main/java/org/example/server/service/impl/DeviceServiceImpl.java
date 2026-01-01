@@ -1,10 +1,11 @@
 package org.example.server.service.impl;
 
 import com.alibaba.excel.EasyExcel;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.example.common.context.Result;
 import org.example.common.enums.ResultCode;
+import org.example.common.constant.CommandStatusConstant;
+import org.example.common.constant.DeviceStatusConstant;
 import org.example.server.client.SocketClient;
 import org.example.server.domain.dto.CommandDto;
 import org.example.server.domain.dto.ConfigDto;
@@ -40,9 +41,8 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
     @Override
     public Result<Void> sendCommand(CommandDto commandDto) {
         try {
-            QueryWrapper<Device> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("name", commandDto.agentId());
-            Device device = deviceMapper.selectOne(queryWrapper);
+            // 通过 id 直接查询设备
+            Device device = deviceMapper.selectById(commandDto.id());
 
             if (device == null) {
                 return Result.fail(ResultCode.NOT_FOUND);
@@ -53,7 +53,7 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
             command.setDeviceId(device.getId());
             command.setCommandType(commandDto.commandType());
             command.setCommandContent(commandDto.commandContent());
-            command.setStatus("pending");
+            command.setStatus(CommandStatusConstant.PENDING);
             command.setCreatedAt(LocalDateTime.now());
             command.setUpdatedAt(LocalDateTime.now());
             commandMapper.insert(command);
@@ -63,24 +63,29 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
                 return handleOfflineCommand(device, command);
             }
 
+            // 处理 restart 命令（重启Agent）
+            if ("restart".equalsIgnoreCase(commandDto.commandType())) {
+                return handleRestartCommand(device, command);
+            }
+
             boolean forwarded = socketClient.forwardCommandToAgent(
-                    commandDto.agentId(),
+                    device.getId(),
                     command.getId(),
                     commandDto.commandType(),
                     commandDto.commandContent()
             );
 
             if (forwarded) {
-                command.setStatus("executing");
+                command.setStatus(CommandStatusConstant.EXECUTING);
                 commandMapper.updateById(command);
-                log.info("Command sent to device: {} - {}", commandDto.agentId(), commandDto.commandType());
+                log.info("Command sent to device: {} - {}", device.getId(), commandDto.commandType());
                 return Result.success("Command sent successfully");
             } else {
-                log.warn("Failed to forward command to agent: {}", commandDto.agentId());
+                log.warn("Failed to forward command to agent: {}", device.getId());
                 return Result.fail(ResultCode.INTERNAL_SERVER_ERROR, "Agent offline or unreachable");
             }
         } catch (Exception e) {
-            log.error("Error sending command to {}", commandDto.agentId(), e);
+            log.error("Error sending command to device: {}", commandDto.id(), e);
             return Result.fail(ResultCode.INTERNAL_SERVER_ERROR);
         }
     }
@@ -91,29 +96,28 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
     private Result<Void> handleOfflineCommand(Device device, Command command) {
         try {
             // 更新设备状态为离线
-            device.setStatusCode(0); // 0表示离线
+            device.setStatusCode(DeviceStatusConstant.OFFLINE);
             device.setUpdatedAt(LocalDateTime.now());
             deviceMapper.updateById(device);
 
             // 标记命令为已执行
-            command.setStatus("completed");
+            command.setStatus(CommandStatusConstant.COMPLETED);
             command.setResult("Device forced offline successfully");
             command.setExecutedAt(LocalDateTime.now());
             command.setUpdatedAt(LocalDateTime.now());
             commandMapper.updateById(command);
 
-            String agentId = device.getName();
             boolean notified = socketClient.forwardCommandToAgent(
-                    agentId,
+                    device.getId(),
                     command.getId(),
                     "offline",
                     "Force offline by admin"
             );
 
             if (notified) {
-                log.info("Device {} forced offline, agent notified via socket", agentId);
+                log.info("Device {} forced offline, agent notified via socket", device.getId());
             } else {
-                log.warn("Device {} forced offline, but failed to notify agent", agentId);
+                log.warn("Device {} forced offline, but failed to notify agent", device.getId());
             }
 
             return Result.success("Device forced offline successfully");
@@ -127,26 +131,116 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
         }
     }
 
+    /**
+     * 处理重启命令
+     * 向Agent发送restart命令，Agent收到后会重启
+     */
+    private Result<Void> handleRestartCommand(Device device, Command command) {
+        try {
+            log.info("Handling restart command for device: {}", device.getId());
+
+            // 转发restart命令给Agent
+            boolean notified = socketClient.forwardCommandToAgent(
+                    device.getId(),
+                    command.getId(),
+                    "restart",
+                    "Restart Agent application"
+            );
+
+            if (notified) {
+                // 标记命令为执行中
+                command.setStatus(CommandStatusConstant.EXECUTING);
+                commandMapper.updateById(command);
+                log.info("Restart command sent to device: {}", device.getId());
+                return Result.success("Restart command sent successfully");
+            } else {
+                // Agent离线，命令发送失败
+                command.setStatus(CommandStatusConstant.FAILED);
+                command.setResult("Agent offline or unreachable");
+                command.setUpdatedAt(LocalDateTime.now());
+                commandMapper.updateById(command);
+                log.warn("Failed to send restart command to device: {}", device.getId());
+                return Result.fail(ResultCode.INTERNAL_SERVER_ERROR, "Agent offline or unreachable");
+            }
+        } catch (Exception e) {
+            log.error("Error handling restart command for device: {}", device.getId(), e);
+            command.setStatus(CommandStatusConstant.FAILED);
+            command.setResult("Error: " + e.getMessage());
+            command.setUpdatedAt(LocalDateTime.now());
+            commandMapper.updateById(command);
+            return Result.fail(ResultCode.INTERNAL_SERVER_ERROR, "Failed to restart device");
+        }
+    }
+
     @Override
     public Result<Void> updateConfig(ConfigDto configDto) {
         try {
-            QueryWrapper<Device> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("ip_address", configDto.ip());
-            Device device = deviceMapper.selectOne(queryWrapper);
-
-            if (device == null) {
-                return Result.fail(ResultCode.NOT_FOUND);
+            // 通过 id 查询设备
+            if (configDto.id() == null || configDto.id() <= 0) {
+                return Result.fail(ResultCode.BAD_REQUEST, "Device id is required");
             }
 
-            // 更新同步频率配置
+            Device device = deviceMapper.selectById(configDto.id());
+
+            if (device == null) {
+                return Result.fail(ResultCode.NOT_FOUND, "Device not found: id=" + configDto.id());
+            }
+
+            // 如果提供了新的设备备注名，则更新备注名
+            if (configDto.remarkName() != null && !configDto.remarkName().isEmpty()) {
+                device.setRemarkName(configDto.remarkName());
+            }
+
+            // 创建配置更新命令
+            Command command = new Command();
+            command.setDeviceId(device.getId());
+            command.setCommandType("config");
+            command.setCommandContent("{\"syncFrequency\":" + configDto.syncFrequencySeconds() + "}");
+            command.setStatus(CommandStatusConstant.PENDING);
+            command.setCreatedAt(LocalDateTime.now());
+            command.setUpdatedAt(LocalDateTime.now());
+            commandMapper.insert(command);
+
+            // 更新本地设备的同步频率配置和其他字段
             device.setSyncFrequency(configDto.syncFrequencySeconds());
             device.setUpdatedAt(LocalDateTime.now());
             deviceMapper.updateById(device);
 
-            log.info("Config updated for device: {} - syncFrequency: {}", configDto.ip(), configDto.syncFrequencySeconds());
-            return Result.success("Config updated successfully");
+            // 异步转发命令给 Agent，避免数据不一致问题
+            // 即使转发失败，数据库已更新，后续可通过重试机制确保最终一致性
+            new Thread(() -> {
+                try {
+                    log.debug("Async forwarding config command to agent: id={}", configDto.id());
+                    
+                    boolean forwarded = socketClient.forwardCommandToAgent(
+                            device.getId(),
+                            command.getId(),
+                            "config",
+                            "{\"syncFrequency\":" + configDto.syncFrequencySeconds() + "}"
+                    );
+
+                    if (forwarded) {
+                        command.setStatus(CommandStatusConstant.EXECUTING);
+                        commandMapper.updateById(command);
+                        log.info("Config command successfully forwarded to agent: id={}, commandId={}, syncFrequency={}", 
+                            configDto.id(), command.getId(), configDto.syncFrequencySeconds());
+                    } else {
+                        // Agent 离线或 Socket 服务不可用，命令状态保持 PENDING
+                        // 供后续重试机制处理（需要实现定时重试任务）
+                        log.warn("Failed to forward config command (agent may be offline): id={}, commandId={}. " +
+                                "Command status: PENDING - will be retried when agent is online.", 
+                            configDto.id(), command.getId());
+                    }
+                } catch (Exception e) {
+                    log.error("Unexpected error in async config command forwarding: id={}, commandId={}", 
+                        configDto.id(), command.getId(), e);
+                }
+            }).start();
+
+            // 立即返回成功，数据库已更新
+            return Result.success("Config updated successfully (async delivery).");
         } catch (Exception e) {
-            log.error("Error updating config for {}", configDto.ip(), e);
+            log.error("Error updating config for id={}", configDto.id(), e);
             return Result.fail(ResultCode.INTERNAL_SERVER_ERROR);
         }
     }
@@ -199,7 +293,6 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
             return Result.fail(ResultCode.INTERNAL_SERVER_ERROR);
         }
     }
-
     @Override
     public void exportExcel(HttpServletResponse response) {
         try {

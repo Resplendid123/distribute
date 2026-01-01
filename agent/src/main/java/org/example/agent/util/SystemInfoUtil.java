@@ -20,16 +20,16 @@ public class SystemInfoUtil {
      */
     public static Map<String, Object> getSystemInfo() {
         Map<String, Object> info = new HashMap<>();
-        
+
         // 获取磁盘信息
         info.put("disk", getDiskInfo());
-        
+
         // 获取内存信息
         info.put("memory", getMemoryInfo());
-        
+
         // 获取 CPU 信息
         info.put("cpu", getCpuInfo());
-        
+
         return info;
     }
 

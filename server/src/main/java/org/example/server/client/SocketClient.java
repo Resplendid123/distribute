@@ -5,6 +5,8 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 import org.slf4j.Logger;
@@ -36,17 +38,17 @@ public class SocketClient {
     /**
      * 向指定的Agent转发命令
      * 通过调用Socket服务的命令转发API
-     * @param agentId 代理ID（Agent标识）
+     * @param deviceId 设备ID（作为Agent标识）
      * @param commandId 命令ID（数据库主键）
      * @param commandType 命令类型
      * @param commandContent 命令内容
-     * @return true表示转发成功，false表示失败
+     * @return true表示转发成功，false表示失败或Agent不在线
      */
-    public boolean forwardCommandToAgent(String agentId, Long commandId, String commandType, String commandContent) {
+    public boolean forwardCommandToAgent(Long deviceId, Long commandId, String commandType, String commandContent) {
         try {
             URI uri = UriComponentsBuilder.fromUriString(socketBaseUrl)
-                    .path("/api/socket/command/forward/{agentId}")
-                    .build(agentId);
+                    .path("/api/socket/command/forward/{deviceId}")
+                    .build(deviceId);
 
             Map<String, Object> command = new HashMap<>();
             command.put("type", "command");
@@ -60,10 +62,20 @@ public class SocketClient {
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(command, headers);
 
             restTemplate.postForObject(uri, entity, String.class);
-            log.info("Command forwarded to agent via Socket: agentId={}, commandType={}", agentId, commandType);
+            log.info("Command forwarded to agent via Socket: deviceId={}, commandType={}", deviceId, commandType);
             return true;
+        } catch (HttpClientErrorException.NotFound e) {
+            log.debug("Agent not found or offline (expected when agent is disconnected): deviceId={}, commandType={}", deviceId, commandType);
+            return false;
+        } catch (HttpClientErrorException e) {
+            log.warn("HTTP error forwarding command to agent: deviceId={}, status={}, error={}", 
+                deviceId, e.getStatusCode(), e.getStatusText());
+            return false;
+        } catch (ResourceAccessException e) {
+            log.warn("Socket service unreachable: {}", socketBaseUrl);
+            return false;
         } catch (Exception e) {
-            log.error("Error forwarding command to agent: agentId={}, commandType={}", agentId, commandType, e);
+            log.error("Unexpected error forwarding command to agent: deviceId={}, commandType={}", deviceId, commandType, e);
             return false;
         }
     }

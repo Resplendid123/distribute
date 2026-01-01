@@ -7,11 +7,12 @@ import java.time.LocalDateTime;
 
 @TableName("devices")
 public class Device {
-    
+
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
-    
+
     private String name;
+    private String remarkName;
     private String ipAddress;
     private Integer syncFrequency;
     private Integer statusCode;
@@ -43,6 +44,14 @@ public class Device {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getRemarkName() {
+        return remarkName;
+    }
+
+    public void setRemarkName(String remarkName) {
+        this.remarkName = remarkName;
     }
 
     public String getIpAddress() {
@@ -106,6 +115,7 @@ public class Device {
         return "Device{" +
                 "id=" + id +
                 ", name='" + name + '\'' +
+                ", remarkName='" + remarkName + '\'' +
                 ", ipAddress='" + ipAddress + '\'' +
                 ", syncFrequency=" + syncFrequency +
                 ", statusCode=" + statusCode +
