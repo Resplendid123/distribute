@@ -7,6 +7,7 @@ public class DeviceVo {
     private String name;
     private String ipAddress;
     private Integer syncFrequency;
+    private String remarkName;
     private Integer statusCode;
     private LocalDateTime lastHeartbeatAt;
     private LocalDateTime createdAt;
@@ -15,11 +16,12 @@ public class DeviceVo {
     public DeviceVo() {
     }
 
-    public DeviceVo(Long id, String name, String ipAddress, Integer syncFrequency, Integer statusCode, LocalDateTime lastHeartbeatAt, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public DeviceVo(Long id, String name, String ipAddress, Integer syncFrequency, String remarkName, Integer statusCode, LocalDateTime lastHeartbeatAt, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.name = name;
         this.ipAddress = ipAddress;
         this.syncFrequency = syncFrequency;
+        this.remarkName = remarkName;
         this.statusCode = statusCode;
         this.lastHeartbeatAt = lastHeartbeatAt;
         this.createdAt = createdAt;
@@ -60,6 +62,14 @@ public class DeviceVo {
         this.syncFrequency = syncFrequency;
     }
 
+    public String getRemarkName() {
+        return remarkName;
+    }
+
+    public void setRemarkName(String remarkName) {
+        this.remarkName = remarkName;
+    }
+
     public Integer getStatusCode() {
         return statusCode;
     }
@@ -97,6 +107,7 @@ public class DeviceVo {
         private String name;
         private String ipAddress;
         private Integer syncFrequency;
+        private String remarkName;
         private Integer statusCode;
         private LocalDateTime lastHeartbeatAt;
         private LocalDateTime createdAt;
@@ -122,6 +133,11 @@ public class DeviceVo {
             return this;
         }
 
+        public Builder remarkName(String remarkName) {
+            this.remarkName = remarkName;
+            return this;
+        }
+
         public Builder statusCode(Integer statusCode) {
             this.statusCode = statusCode;
             return this;
@@ -143,7 +159,7 @@ public class DeviceVo {
         }
 
         public DeviceVo build() {
-            return new DeviceVo(id, name, ipAddress, syncFrequency, statusCode, lastHeartbeatAt, createdAt, updatedAt);
+            return new DeviceVo(id, name, ipAddress, syncFrequency, remarkName, statusCode, lastHeartbeatAt, createdAt, updatedAt);
         }
     }
 

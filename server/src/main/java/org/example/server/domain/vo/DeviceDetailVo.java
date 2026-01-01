@@ -9,6 +9,7 @@ public class DeviceDetailVo {
     private String name;
     private String ipAddress;
     private Integer syncFrequency;
+    private String remarkName;
     private Integer statusCode;
     private String info;
     private LocalDateTime lastHeartbeatAt;
@@ -132,6 +133,14 @@ public class DeviceDetailVo {
 
     public void setSyncFrequency(Integer syncFrequency) {
         this.syncFrequency = syncFrequency;
+    }
+
+    public String getRemarkName() {
+        return remarkName;
+    }
+
+    public void setRemarkName(String remarkName) {
+        this.remarkName = remarkName;
     }
 
     public Integer getStatusCode() {
@@ -267,6 +276,7 @@ public class DeviceDetailVo {
         private String name;
         private String ipAddress;
         private Integer syncFrequency;
+        private String remarkName;
         private Integer statusCode;
         private String info;
         private LocalDateTime lastHeartbeatAt;
@@ -277,6 +287,7 @@ public class DeviceDetailVo {
         public Builder name(String name) { this.name = name; return this; }
         public Builder ipAddress(String ipAddress) { this.ipAddress = ipAddress; return this; }
         public Builder syncFrequency(Integer syncFrequency) { this.syncFrequency = syncFrequency; return this; }
+        public Builder remarkName(String remarkName) { this.remarkName = remarkName; return this; }
         public Builder statusCode(Integer statusCode) { this.statusCode = statusCode; return this; }
         public Builder info(String info) { this.info = info; return this; }
         public Builder lastHeartbeatAt(LocalDateTime lastHeartbeatAt) { this.lastHeartbeatAt = lastHeartbeatAt; return this; }
